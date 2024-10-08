@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apocalipsis Zombie: Defensa Automática</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #111;
+            font-family: Arial, sans-serif;
+        }
+        #gameArea {
+            width: 7000px;
+            height: 5000px;
+            background-color: #333;
+            position: relative;
+            overflow: hidden;
+            cursor: none;
+        }
+        #player {
+            width: 40px;
+            height: 40px;
+            background-color: #0f0;
+            position: absolute;
+            border-radius: 50%;
+        }
+        .zombie {
+            width: 30px;
+            height: 30px;
+            background-color: #f00;
+            position: absolute;
+            border-radius: 50%;
+        }
+        .bullet {
+            width: 5px;
+            height: 5px;
+            background-color: #ff0;
+            position: absolute;
+            border-radius: 50%;
+        }
+        #score, #health, #level {
+            position: absolute;
+            color: white;
+            font-size: 18px;
+        }
+        #score { top: 10px; left: 10px; }
+        #health { top: 10px; right: 10px; }
+        #level { bottom: 10px; left: 10px; }
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 48px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameArea">
+        <div id="player"></div>
+        <div id="score">Puntuación: 0</div>
+        <div id="health">Salud: 100</div>
+        <div id="level">Nivel: 1</div>
+        <div id="gameOver">¡Juego Terminado!</div>
+    </div>
+
+    <script>
+        const gameArea = document.getElementById('gameArea');
+        const player = document.getElementById('player');
+        const scoreElement = document.getElementById('score');
+        const healthElement = document.getElementById('health');
+        const levelElement = document.getElementById('level');
+        const gameOverElement = document.getElementById('gameOver');
+
+        let score = 0;
+        let health = 100;
+        let level = 1;
+        let zombies = [];
+        let bullets = [];
+        let gameLoop;
+        let shootInterval;
+
+        function updatePlayerPosition(e) {
+            const rect = gameArea.getBoundingClientRect();
+            player.style.left = (e.clientX - rect.left - 20) + 'px';
+            player.style.top = (e.clientY - rect.top - 20) + 'px';
+        }
+
+        function createZombie() {
+            const zombie = document.createElement('div');
+            zombie.classList.add('zombie');
+            let x, y;
+            if (Math.random() < 0.5) {
+                x = Math.random() < 0.5 ? -30 : gameArea.offsetWidth;
+                y = Math.random() * gameArea.offsetHeight;
+            } else {
+                x = Math.random() * gameArea.offsetWidth;
+                y = Math.random() < 0.5 ? -30 : gameArea.offsetHeight;
+            }
+            zombie.style.left = x + 'px';
+            zombie.style.top = y + 'px';
+            gameArea.appendChild(zombie);
+            zombies.push(zombie);
+        }
+
+        function moveZombies() {
+            const playerRect = player.getBoundingClientRect();
+            const playerCenterX = playerRect.left + playerRect.width / 2;
+            const playerCenterY = playerRect.top + playerRect.height / 2;
+
+            zombies.forEach(zombie => {
+                const zombieRect = zombie.getBoundingClientRect();
+                const zombieCenterX = zombieRect.left + zombieRect.width / 2;
+                const zombieCenterY = zombieRect.top + zombieRect.height / 2;
+
+                const angle = Math.atan2(playerCenterY - zombieCenterY, playerCenterX - zombieCenterX);
+                const speed = 1 + level * 0.1;
+                const dx = Math.cos(angle) * speed;
+                const dy = Math.sin(angle) * speed;
+
+                zombie.style.left = (zombieRect.left + dx - gameArea.getBoundingClientRect().left) + 'px';
+                zombie.style.top = (zombieRect.top + dy - gameArea.getBoundingClientRect().top) + 'px';
+
+                if (checkCollision(playerRect, zombieRect)) {
+                    health -= 10;
+                    healthElement.textContent = `Salud: ${health}`;
+                    gameArea.removeChild(zombie);
+                    zombies = zombies.filter(z => z !== zombie);
+                    if (health <= 0) {
+                        endGame();
+                    }
+                }
+            });
+        }
+
+        function checkCollision(rect1, rect2) {
+            return rect1.left < rect2.right &&
+                   rect1.right > rect2.left &&
+                   rect1.top < rect2.bottom &&
+                   rect1.bottom > rect2.top;
+        }
+
+        function shoot() {
+            const bullet = document.createElement('div');
+            bullet.classList.add('bullet');
+            const playerRect = player.getBoundingClientRect();
+            const gameRect = gameArea.getBoundingClientRect();
+            bullet.style.left = (playerRect.left + playerRect.width / 2 - gameRect.left) + 'px';
+            bullet.style.top = (playerRect.top + playerRect.height / 2 - gameRect.top) + 'px';
+            gameArea.appendChild(bullet);
+            bullets.push(bullet);
+
+            const angle = Math.random() * 2 * Math.PI; // Disparo en dirección aleatoria
+            const speed = 5;
+            const dx = Math.cos(angle) * speed;
+            const dy = Math.sin(angle) * speed;
+
+            const moveBullet = setInterval(() => {
+                const bulletRect = bullet.getBoundingClientRect();
+                bullet.style.left = (bulletRect.left + dx - gameRect.left) + 'px';
+                bullet.style.top = (bulletRect.top + dy - gameRect.top) + 'px';
+
+                zombies.forEach(zombie => {
+                    const zombieRect = zombie.getBoundingClientRect();
+                    if (checkCollision(bulletRect, zombieRect)) {
+                        clearInterval(moveBullet);
+                        gameArea.removeChild(bullet);
+                        bullets = bullets.filter(b => b !== bullet);
+                        gameArea.removeChild(zombie);
+                        zombies = zombies.filter(z => z !== zombie);
+                        score += 10;
+                        scoreElement.textContent = `Puntuación: ${score}`;
+                        if (score % 100 === 0) {
+                            level++;
+                            levelElement.textContent = `Nivel: ${level}`;
+                        }
+                    }
+                });
+
+                if (bulletRect.top < 0 || bulletRect.bottom > gameRect.height ||
+                    bulletRect.left < 0 || bulletRect.right > gameRect.width) {
+                    clearInterval(moveBullet);
+                    gameArea.removeChild(bullet);
+                    bullets = bullets.filter(b => b !== bullet);
+                }
+            }, 20);
+        }
+
+        function endGame() {
+            clearInterval(gameLoop);
+            clearInterval(shootInterval);
+            gameArea.removeEventListener('mousemove', updatePlayerPosition);
+            gameOverElement.style.display = 'block';
+        }
+
+        function startGame() {
+            gameArea.addEventListener('mousemove', updatePlayerPosition);
+
+            gameLoop = setInterval(() => {
+                if (Math.random() < 0.05 + level * 0.01) {
+                    createZombie();
+                }
+                moveZombies();
+            }, 10);
+
+            shootInterval = setInterval(shoot, 200);
+        }
+
+        startGame();
+    </script>
+</body>
+</html>
